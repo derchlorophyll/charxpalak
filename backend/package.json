@@ -1,0 +1,17 @@
+{
+  "name": "charxpalak-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Charxpalak Choyxonasi",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7"
+  }
+}

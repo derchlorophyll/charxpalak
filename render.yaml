@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: charxpalak-choyxona
+    env: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: node backend/server.js
+    disk:
+      name: charxpalak-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
