@@ -9,9 +9,10 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.21.2",
     "better-sqlite3": "^11.7.0",
-    "dotenv": "^16.4.7"
+    "charxpalak-choyxona-app": "file:..",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
   }
 }

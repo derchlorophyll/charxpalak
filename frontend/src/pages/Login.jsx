@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../api';
-import { Phone, User, Briefcase, ArrowRight, ShieldCheck, Lock, KeyRound, AlertCircle, Sparkles } from 'lucide-react';
+import { Phone, User, Briefcase, ArrowRight, ShieldCheck, Lock, KeyRound, AlertCircle, Crown, ArrowLeft } from 'lucide-react';
 
 const ROLES_LIST = [
   { id: 'CASHIER', title: 'Кассир' },
@@ -15,7 +15,8 @@ const ROLES_LIST = [
 ];
 
 export default function Login({ onLoginSuccess }) {
-  const [view, setView] = useState('phone'); // 'phone' | 'pin' | 'otp' | 'set_pin' | 'register' | 'pending_notice'
+  // Views: 'phone' | 'pin' | 'otp' | 'set_pin' | 'unregistered_choice' | 'claim_leader' | 'register' | 'pending_notice'
+  const [view, setView] = useState('phone');
   const [phone, setPhone] = useState('+998');
   const [fullName, setFullName] = useState('');
   const [roleId, setRoleId] = useState('CASHIER');
@@ -29,11 +30,12 @@ export default function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const realLeaders = [
-    { id: 1, name: 'Каюмов Жамшидбек', role: 'Мулкдор (Эга)' },
-    { id: 2, name: 'Басиржонов Жавлонбек', role: 'Иш бошқарувчи (РР)' },
-    { id: 3, name: 'Паҳлавон', role: 'Иш юритувчи (УД)' },
-  ];
+  // Leadership claim state
+  const [unboundLeaders, setUnboundLeaders] = useState([]);
+  const [selectedLeaderId, setSelectedLeaderId] = useState('');
+  const [masterKey, setMasterKey] = useState('');
+  const [claimOtpRequested, setClaimOtpRequested] = useState(false);
+  const [claimOtpCode, setClaimOtpCode] = useState('');
 
   const handlePhoneFormat = (val) => {
     let cleaned = val.replace(/[^\d+]/g, '');
@@ -44,12 +46,13 @@ export default function Login({ onLoginSuccess }) {
     setPhone(cleaned);
   };
 
+  // Step 1: Check Phone Number
   const handleCheckPhone = async (e) => {
     e?.preventDefault();
     setError('');
 
     if (phone.length < 13) {
-      setError('Илтимос, тўлиқ телефон рақамингизни киритинг');
+      setError('Илтимос, тўлиқ телефон рақамингизни киритинг (+998...)');
       return;
     }
 
@@ -58,7 +61,13 @@ export default function Login({ onLoginSuccess }) {
       const res = await api.sendOtp(phone);
 
       if (res.notRegistered) {
-        setView('register');
+        if (res.unboundLeaders && res.unboundLeaders.length > 0) {
+          setUnboundLeaders(res.unboundLeaders);
+          setSelectedLeaderId(String(res.unboundLeaders[0].id));
+          setView('unregistered_choice');
+        } else {
+          setView('register');
+        }
         return;
       }
 
@@ -71,7 +80,7 @@ export default function Login({ onLoginSuccess }) {
       setPendingUser(res.user);
       setTelegramLink(res.telegramLink);
 
-      // If user has PIN code, ask for PIN directly
+      // If user already has PIN, prompt for PIN first
       if (res.hasPinCode) {
         setView('pin');
       } else {
@@ -84,7 +93,7 @@ export default function Login({ onLoginSuccess }) {
     }
   };
 
-  // Login with PIN Code
+  // Step 2: Login with 4-digit PIN Code
   const handleVerifyPin = async (e) => {
     e?.preventDefault();
     setError('');
@@ -106,7 +115,7 @@ export default function Login({ onLoginSuccess }) {
     }
   };
 
-  // Verify OTP from Telegram
+  // Step 3: Verify OTP from Telegram
   const handleVerifyOtp = async (e) => {
     e?.preventDefault();
     setError('');
@@ -121,7 +130,6 @@ export default function Login({ onLoginSuccess }) {
       const res = await api.verifyOtp(phone, code);
       localStorage.setItem('charxpalak_token', res.token);
 
-      // If user does not have PIN code, offer setting it
       if (!res.hasPinCode) {
         setAuthenticatedUser(res.user);
         setView('set_pin');
@@ -129,17 +137,32 @@ export default function Login({ onLoginSuccess }) {
         onLoginSuccess(res.user);
       }
     } catch (err) {
-      setError(err.message || 'Код нотўғри');
+      setError(err.message || 'Код нотўғри ёки муддати тугаган');
     } finally {
       setLoading(false);
     }
   };
 
-  // Set PIN Code (or skip)
+  // Request OTP switch from PIN view
+  const handleSwitchToOtp = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await api.sendOtp(phone);
+      setTelegramLink(res.telegramLink);
+      setView('otp');
+    } catch (err) {
+      setError(err.message || 'Код юборишда хатолик');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 4: Set or Skip PIN Code
   const handleSavePin = async (e) => {
     e?.preventDefault();
     if (newPin.length !== 4) {
-      setError('ПИН-код 4 та рақамдан иборат бўлиши керак');
+      setError('ПИН-код роппа-роса 4 та рақамдан иборат бўлиши керак');
       return;
     }
 
@@ -158,6 +181,7 @@ export default function Login({ onLoginSuccess }) {
     onLoginSuccess(authenticatedUser);
   };
 
+  // Step 5: Regular Employee Registration
   const handleRegister = async (e) => {
     e?.preventDefault();
     setError('');
@@ -193,15 +217,56 @@ export default function Login({ onLoginSuccess }) {
     }
   };
 
-  const handleFastLeaderLogin = async (leaderId) => {
+  // Step 6: Leadership Claim (One-time secure binding with Master Key & Phone OTP)
+  const handleRequestClaimOtp = async (e) => {
+    e?.preventDefault();
     setError('');
+
+    if (!masterKey.trim()) {
+      setError('Илтимос, Раҳбарият махсус кодини киритинг');
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await api.fastLogin(leaderId);
-      localStorage.setItem('charxpalak_token', res.token);
-      onLoginSuccess(res.user);
+      const res = await api.claimLeader({
+        leaderId: parseInt(selectedLeaderId, 10),
+        phone,
+        masterKey: masterKey.trim()
+      });
+
+      setTelegramLink(res.telegramLink);
+      setClaimOtpRequested(true);
     } catch (err) {
-      setError(err.message || 'Киришда хатолик');
+      setError(err.message || 'Хатолик юз берди');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmClaimOtp = async (e) => {
+    e?.preventDefault();
+    setError('');
+
+    if (!claimOtpCode || claimOtpCode.length < 4) {
+      setError('4 хонали тасдиқлаш кодини киритинг');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await api.claimLeader({
+        leaderId: parseInt(selectedLeaderId, 10),
+        phone,
+        masterKey: masterKey.trim(),
+        code: claimOtpCode.trim()
+      });
+
+      localStorage.setItem('charxpalak_token', res.token);
+      setAuthenticatedUser(res.user);
+      setView('set_pin');
+    } catch (err) {
+      setError(err.message || 'Код нотўғри ёки муддати тугаган');
     } finally {
       setLoading(false);
     }
@@ -255,6 +320,9 @@ export default function Login({ onLoginSuccess }) {
                 />
                 <Phone className="w-5 h-5 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
               </div>
+              <p className="text-[11px] text-slate-500 mt-2">
+                Ҳар бир ходим (шу жумладан раҳбарият) ўз телефон рақами орқали тизимга киради.
+              </p>
             </div>
 
             <button
@@ -268,7 +336,170 @@ export default function Login({ onLoginSuccess }) {
           </form>
         )}
 
-        {/* 2. ENTER PERSONAL PIN CODE */}
+        {/* 2. UNREGISTERED CHOICE (EMPLOYEE OR LEADERSHIP ACTIVATION) */}
+        {view === 'unregistered_choice' && (
+          <div className="space-y-3.5">
+            <div className="text-center pb-1">
+              <h3 className="font-extrabold text-blue-950 text-base">Телефон рўйхатдан ўтмаган</h3>
+              <p className="text-xs text-slate-500 font-mono mt-0.5">{phone}</p>
+            </div>
+
+            <p className="text-xs text-slate-600 text-center">
+              Сиз қандай сифатда дастурга қўшилмоқчисиз?
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setView('register')}
+              className="w-full p-3.5 bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200 rounded-2xl text-left flex items-center space-x-3 transition-all active:scale-98"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-700 text-white flex items-center justify-center text-lg flex-shrink-0">
+                🍴
+              </div>
+              <div>
+                <div className="font-extrabold text-blue-950 text-xs">Чойхона ходими сифатида ариза бериш</div>
+                <div className="text-[11px] text-blue-700/80">Кассир, Ошпаз, Қассоб, ва б.</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setView('claim_leader')}
+              className="w-full p-3.5 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-300 rounded-2xl text-left flex items-center space-x-3 transition-all active:scale-98"
+            >
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg flex-shrink-0">
+                👑
+              </div>
+              <div>
+                <div className="font-extrabold text-amber-950 text-xs">Раҳбарият аккаунтини улаш</div>
+                <div className="text-[11px] text-amber-800">Каюмов Ж., Басиржонов Ж., Паҳлавон</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setView('phone'); setError(''); }}
+              className="w-full text-center text-xs text-slate-500 hover:text-slate-800 py-1"
+            >
+              Бошқа рақам киритиш
+            </button>
+          </div>
+        )}
+
+        {/* 3. CLAIM LEADERSHIP ACCOUNT (ONE-TIME SECURE BINDING) */}
+        {view === 'claim_leader' && (
+          <div className="space-y-4">
+            <div className="text-center pb-1">
+              <div className="w-12 h-12 mx-auto bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mb-2 border border-amber-200">
+                <Crown className="w-6 h-6" />
+              </div>
+              <h3 className="font-extrabold text-blue-950 text-base">Раҳбарият аккаунтини улаш</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Рақамингизни ({phone}) раҳбарият профилига бириктириш
+              </p>
+            </div>
+
+            {!claimOtpRequested ? (
+              <form onSubmit={handleRequestClaimOtp} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Сиз қайси раҳбарсиз?
+                  </label>
+                  <select
+                    value={selectedLeaderId}
+                    onChange={(e) => setSelectedLeaderId(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-semibold text-xs focus:ring-2 focus:ring-blue-600 outline-none"
+                  >
+                    {unboundLeaders.map((ldr) => (
+                      <option key={ldr.id} value={ldr.id}>
+                        {ldr.full_name} — {ldr.role_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Раҳбарият махсус коди
+                  </label>
+                  <input
+                    type="password"
+                    value={masterKey}
+                    onChange={(e) => setMasterKey(e.target.value)}
+                    placeholder="Масалан: 7777"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-semibold text-sm focus:ring-2 focus:ring-blue-600 outline-none"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    (Ушбу код фақат чойхона эгасига маълум. Стандарт код: <b>7777</b>)
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-blue-700/30 flex items-center justify-center space-x-2 transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  <span>{loading ? 'Юборилмоқда...' : 'Тасдиқлаш кодини олиш'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setView('phone'); setError(''); }}
+                  className="w-full text-center text-xs text-slate-500 hover:text-slate-800 py-1"
+                >
+                  Ортга қайтиш
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleConfirmClaimOtp} className="space-y-4">
+                <div className="text-center text-xs text-slate-600 leading-relaxed">
+                  Тасдиқлаш коди Telegram ботингизга юборилди.
+                </div>
+
+                {telegramLink && (
+                  <a
+                    href={telegramLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center space-x-2 bg-sky-500 hover:bg-sky-600 text-white py-3 px-4 rounded-2xl font-bold text-xs shadow-md transition-all active:scale-98"
+                  >
+                    <span>✈️ @charxpalak_authbot ни очиш</span>
+                  </a>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 text-center">
+                    4 хонали тасдиқлаш коди
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={claimOtpCode}
+                    onChange={(e) => setClaimOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="0000"
+                    autoFocus
+                    className="w-full text-center tracking-[0.5em] py-3 bg-slate-50 border border-slate-300 rounded-2xl text-slate-900 font-black text-2xl focus:ring-2 focus:ring-blue-600 outline-none"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-blue-700/30 flex items-center justify-center space-x-2 transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  <span>{loading ? 'Тасдиқланмоқда...' : 'Рақамни боғлаш ва кириш'}</span>
+                  <ShieldCheck className="w-4 h-4" />
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* 4. ENTER PERSONAL PIN CODE */}
         {view === 'pin' && (
           <form onSubmit={handleVerifyPin} className="space-y-4">
             <div className="text-center pb-1">
@@ -308,7 +539,8 @@ export default function Login({ onLoginSuccess }) {
             <div className="text-center pt-1">
               <button
                 type="button"
-                onClick={() => setView('otp')}
+                onClick={handleSwitchToOtp}
+                disabled={loading}
                 className="text-xs text-blue-700 hover:underline font-semibold"
               >
                 ПИН-кодни унутдингизми? Telegram бот орқали кириш
@@ -317,14 +549,14 @@ export default function Login({ onLoginSuccess }) {
           </form>
         )}
 
-        {/* 3. ENTER TELEGRAM OTP CODE */}
+        {/* 5. ENTER TELEGRAM OTP CODE */}
         {view === 'otp' && (
           <form onSubmit={handleVerifyOtp} className="space-y-4">
             <div className="text-center pb-1">
               <div className="font-extrabold text-slate-900 text-base">{pendingUser?.full_name}</div>
               <div className="text-xs text-blue-700 font-semibold">{pendingUser?.role_title}</div>
               <p className="text-xs text-slate-500 mt-1">
-                Тасдиқлаш коди Telegram ботга юборилди
+                Тасдиқлаш коди Telegram ботингизга юборилди
               </p>
             </div>
 
@@ -376,7 +608,7 @@ export default function Login({ onLoginSuccess }) {
           </form>
         )}
 
-        {/* 4. OPTIONAL SET PIN CODE (WITH SKIP BUTTON!) */}
+        {/* 6. OPTIONAL SET PIN CODE (WITH SKIP BUTTON!) */}
         {view === 'set_pin' && (
           <form onSubmit={handleSavePin} className="space-y-4">
             <div className="text-center">
@@ -385,7 +617,7 @@ export default function Login({ onLoginSuccess }) {
               </div>
               <h3 className="font-extrabold text-slate-900 text-base">ПИН-код (пароль) ўрнатиш</h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Кейинги сафар ҳар сафар код кутмасдан тез кириш учун 4 хонали ПИН-код ўрнатинг
+                Кейинги сафар ҳар сафар код кутмасдан тез кириш учун 4 хонали шахсий ПИН-код ўрнатинг
               </p>
             </div>
 
@@ -422,7 +654,7 @@ export default function Login({ onLoginSuccess }) {
           </form>
         )}
 
-        {/* 5. REGISTRATION */}
+        {/* 7. REGISTRATION */}
         {view === 'register' && (
           <form onSubmit={handleRegister} className="space-y-3.5">
             <div className="text-center pb-1">
@@ -513,7 +745,7 @@ export default function Login({ onLoginSuccess }) {
           </form>
         )}
 
-        {/* 6. PENDING APPROVAL NOTICE */}
+        {/* 8. PENDING APPROVAL NOTICE */}
         {view === 'pending_notice' && (
           <div className="text-center space-y-4 py-2">
             <div className="w-14 h-14 mx-auto bg-amber-100 text-amber-600 rounded-full flex items-center justify-center text-2xl">
@@ -540,30 +772,9 @@ export default function Login({ onLoginSuccess }) {
 
       </div>
 
-      {/* LEADERSHIP DIRECT ACCESS */}
-      <div className="pt-2 pb-2">
-        <div className="flex items-center justify-center space-x-1.5 text-xs text-blue-950 font-bold mb-2">
-          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-          <span>Раҳбарият ҳисобига кириш:</span>
-        </div>
-        <div className="space-y-1.5">
-          {realLeaders.map((leader) => (
-            <button
-              key={leader.id}
-              onClick={() => handleFastLeaderLogin(leader.id)}
-              disabled={loading}
-              className="w-full bg-white hover:bg-blue-50/80 border border-blue-200/90 hover:border-blue-400 p-2.5 rounded-2xl flex items-center justify-between shadow-sm active:scale-98 transition-all"
-            >
-              <div className="text-left">
-                <div className="font-extrabold text-blue-950 text-xs">{leader.name}</div>
-                <div className="text-[11px] text-blue-700 font-semibold">{leader.role}</div>
-              </div>
-              <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
-                Кириш →
-              </span>
-            </button>
-          ))}
-        </div>
+      {/* Footer Info */}
+      <div className="text-center text-[11px] text-blue-900/60 pb-2">
+        Чархпалак Чойхонаси © 2026. Барча ҳуқуқлар ҳимояланган.
       </div>
 
     </div>

@@ -92,13 +92,17 @@ export function initializeRealData() {
   insertSetting.run('TELEGRAM_BOT_TOKEN', '8864236616:AAFhhyZay4tnhiQlVrjX5S7BftiUCH-tOcQ');
   insertSetting.run('TELEGRAM_BOT_USERNAME', 'charxpalak_authbot');
   insertSetting.run('SMS_PROVIDER', 'TELEGRAM');
+  insertSetting.run('LEADER_SETUP_KEY', '7777');
 }
 
-// Always ensure the official Telegram bot token is updated in DB
+// Always ensure the official Telegram bot token and settings are updated in DB
 const tokenSetting = db.prepare('INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)');
 tokenSetting.run('TELEGRAM_BOT_TOKEN', '8864236616:AAFhhyZay4tnhiQlVrjX5S7BftiUCH-tOcQ');
 tokenSetting.run('TELEGRAM_BOT_USERNAME', 'charxpalak_authbot');
 tokenSetting.run('SMS_PROVIDER', 'TELEGRAM');
+
+const initSetting = db.prepare('INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)');
+initSetting.run('LEADER_SETUP_KEY', '7777');
 
 // Check if leaders exist
 const leaderCount = db.prepare('SELECT count(*) as count FROM users').get().count;

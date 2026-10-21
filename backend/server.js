@@ -1,15 +1,17 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import db from './db.js';
-import { getBotConfig, updateBotConfig, startPolling, sendTelegramMessage } from './telegram.js';
+import { getBotConfig, updateBotConfig, startPolling, sendTelegramMessage, sendOtpToUser } from './telegram.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+const JWT_SECRET = process.env.JWT_SECRET || 'charxpalak-super-secret-key-2026';
 
 app.use(cors());
 app.use(express.json());
@@ -20,22 +22,48 @@ export function isTop3Role(roleId) {
   return TOP_3_ROLES.includes(roleId);
 }
 
+function createAuthToken(user) {
+  const payload = {
+    userId: user.id,
+    phone: user.phone,
+    role: user.role_id,
+    time: Date.now()
+  };
+  const payloadStr = JSON.stringify(payload);
+  const signature = crypto.createHmac('sha256', JWT_SECRET).update(payloadStr).digest('hex');
+  return Buffer.from(JSON.stringify({ payload, signature })).toString('base64');
+}
+
+function verifyAuthToken(tokenStr) {
+  if (!tokenStr) return null;
+  try {
+    const raw = Buffer.from(tokenStr, 'base64').toString('utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed.payload && parsed.signature) {
+      const payloadStr = JSON.stringify(parsed.payload);
+      const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(payloadStr).digest('hex');
+      if (parsed.signature === expectedSig) {
+        return parsed.payload.userId;
+      }
+    }
+    // Backward compatibility for simple tokens during transition
+    if (parsed.userId) {
+      return parsed.userId;
+    }
+  } catch (e) {
+    const fallbackId = parseInt(tokenStr, 10);
+    if (!isNaN(fallbackId)) return fallbackId;
+  }
+  return null;
+}
+
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
-  const customUserId = req.headers['x-user-id'];
-
   let userId = null;
+
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
-    try {
-      const decoded = Buffer.from(token, 'base64').toString('utf-8');
-      const parsed = JSON.parse(decoded);
-      userId = parsed.userId;
-    } catch (e) {
-      userId = parseInt(token, 10);
-    }
-  } else if (customUserId) {
-    userId = parseInt(customUserId, 10);
+    userId = verifyAuthToken(token);
   }
 
   if (!userId) {
@@ -60,9 +88,9 @@ function requireTop3(req, res, next) {
   next();
 }
 
-// ---------------- AUTH & REGISTRATION ROUTES ----------------
+// ---------------- AUTHENTICATION & VERIFICATION ----------------
 
-// Employee self-registration
+// 1. Employee self-registration
 app.post('/api/auth/register', (req, res) => {
   let { phone, full_name, role_id, role_title } = req.body;
 
@@ -111,11 +139,11 @@ app.post('/api/auth/register', (req, res) => {
     ok: true,
     isPendingApproval: true,
     user: newApplicant,
-    message: 'Аризангиз муваффақиятли юборилди! Раҳбарият (Каюмов Жамшидбек, Паҳлавон ёки Басиржонов Жавлонбек) тасдиқлаганидан сўнг тизимга кира оласиз.'
+    message: 'Аризангиз юборилди! Раҳбарият (Каюмов Жамшидбек, Паҳлавон ёки Басиржонов Жавлонбек) тасдиқлаганидан сўнг киришингиз мумкин.'
   });
 });
 
-// Check phone & Send OTP
+// 2. Check phone & Request OTP (NO DUPLICATE MESSAGES)
 app.post('/api/auth/send-otp', async (req, res) => {
   let { phone } = req.body;
   if (!phone) return res.status(400).json({ error: 'Телефон рақам киритилмади' });
@@ -126,11 +154,19 @@ app.post('/api/auth/send-otp', async (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE phone = ?').get(cleanPhone);
 
   if (!user) {
+    // Check if leadership accounts have not bound their phones yet
+    const unboundLeaders = db.prepare(`
+      SELECT id, full_name, role_title FROM users 
+      WHERE role_id IN ('OWNER', 'SUPERVISOR', 'MANAGER') 
+      AND (phone LIKE '+99890000000%' OR phone IS NULL)
+    `).all();
+
     return res.status(200).json({
       ok: false,
       notRegistered: true,
       phone: cleanPhone,
-      message: 'Ушбу телефон рақам рўйхатдан ўтмаган. Илтимос, исмингизни ёзиб рўйхатдан ўтинг.'
+      unboundLeaders,
+      message: 'Ушбу телефон рақам рўйхатдан ўтмаган.'
     });
   }
 
@@ -147,28 +183,17 @@ app.post('/api/auth/send-otp', async (req, res) => {
     });
   }
 
-  // Generate 4-digit OTP
-  const code = Math.floor(1000 + Math.random() * 9000).toString();
-  const expiresAt = Date.now() + 10 * 60 * 1000;
-
-  db.prepare('INSERT INTO otp_codes (phone, code, expires_at) VALUES (?, ?, ?)').run(
-    cleanPhone,
-    code,
-    expiresAt
-  );
-
+  // Centralized, de-duplicated OTP delivery
+  const otpRes = await sendOtpToUser(cleanPhone, user);
   const botConfig = getBotConfig();
 
-  // If user linked Telegram, send to Telegram immediately
-  let sentViaTelegram = false;
-  if (botConfig.token && user.telegram_chat_id) {
-    sentViaTelegram = await sendTelegramMessage(
-      user.telegram_chat_id,
-      `🫖 <b>Чархпалак Чойхонаси</b>\n\n` +
-      `Ассалому алайкум, <b>${user.full_name}</b>!\n` +
-      `🔐 Кириш кодингиз: <code>${code}</code>\n\n` +
-      `Код муддати: 10 дақиқа.`
-    );
+  let telegramLink = null;
+  if (botConfig.username) {
+    if (otpRes.sentToTelegram) {
+      telegramLink = `https://t.me/${botConfig.username}`;
+    } else {
+      telegramLink = `https://t.me/${botConfig.username}?start=auth_${cleanPhone.replace('+', '')}`;
+    }
   }
 
   return res.json({
@@ -182,14 +207,13 @@ app.post('/api/auth/send-otp', async (req, res) => {
       role_id: user.role_id,
       role_title: user.role_title
     },
-    sentViaTelegram,
-    telegramLink: botConfig.username ? `https://t.me/${botConfig.username}?start=auth_${cleanPhone.replace('+', '')}` : null,
-    telegramBotUsername: botConfig.username,
-    debugCode: code
+    sentDirectly: otpRes.sentToTelegram,
+    telegramLink,
+    telegramBotUsername: botConfig.username
   });
 });
 
-// Verify OTP
+// 3. Verify OTP
 app.post('/api/auth/verify-otp', (req, res) => {
   let { phone, code } = req.body;
   if (!phone || !code) return res.status(400).json({ error: 'Телефон ва код талаб қилинади' });
@@ -203,21 +227,16 @@ app.post('/api/auth/verify-otp', (req, res) => {
     ORDER BY id DESC LIMIT 1
   `).get(cleanPhone, code.toString().trim(), Date.now());
 
-  const isMasterCode = code.toString().trim() === '7777';
-
-  if (!validOtp && !isMasterCode) {
+  if (!validOtp) {
     return res.status(400).json({ error: 'Тасдиқлаш коди нотўғри ёки муддати тугаган' });
   }
 
-  if (validOtp) {
-    db.prepare('DELETE FROM otp_codes WHERE id = ?').run(validOtp.id);
-  }
+  db.prepare('DELETE FROM otp_codes WHERE id = ?').run(validOtp.id);
 
   const user = db.prepare('SELECT * FROM users WHERE phone = ? AND is_active = 1').get(cleanPhone);
   if (!user) return res.status(404).json({ error: 'Фойдаланувчи топилмади ёки ҳисоб фаол эмас' });
 
-  const tokenPayload = JSON.stringify({ userId: user.id, phone: user.phone, role: user.role_id, time: Date.now() });
-  const token = Buffer.from(tokenPayload).toString('base64');
+  const token = createAuthToken(user);
 
   return res.json({
     ok: true,
@@ -236,7 +255,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
   });
 });
 
-// Verify PIN Code (Quick password login)
+// 4. Verify PIN Code (Quick password login)
 app.post('/api/auth/verify-pin', (req, res) => {
   let { phone, pin } = req.body;
   if (!phone || !pin) return res.status(400).json({ error: 'Телефон ва ПИН-код талаб қилинади' });
@@ -251,8 +270,7 @@ app.post('/api/auth/verify-pin', (req, res) => {
     return res.status(400).json({ error: 'ПИН-код нотўғри' });
   }
 
-  const tokenPayload = JSON.stringify({ userId: user.id, phone: user.phone, role: user.role_id, time: Date.now() });
-  const token = Buffer.from(tokenPayload).toString('base64');
+  const token = createAuthToken(user);
 
   return res.json({
     ok: true,
@@ -270,7 +288,83 @@ app.post('/api/auth/verify-pin', (req, res) => {
   });
 });
 
-// Set or Update personal PIN Code
+// 5. Securely Bind Phone to Leadership Account (One-time secure verification with Master Setup Key)
+app.post('/api/auth/claim-leader', async (req, res) => {
+  const { leaderId, phone, masterKey, code } = req.body;
+
+  if (!leaderId || !phone) {
+    return res.status(400).json({ error: 'Раҳбар ва телефон рақами талаб қилинади' });
+  }
+
+  let cleanPhone = phone.replace(/[^\d+]/g, '');
+  if (!cleanPhone.startsWith('+')) cleanPhone = '+' + cleanPhone;
+
+  const leader = db.prepare('SELECT * FROM users WHERE id = ?').get(leaderId);
+  if (!leader || !isTop3Role(leader.role_id)) {
+    return res.status(404).json({ error: 'Раҳбар топилмади' });
+  }
+
+  // Security check 1: If already bound to a real phone, cannot re-claim!
+  if (leader.phone && !leader.phone.startsWith('+99890000000') && leader.phone !== cleanPhone) {
+    return res.status(403).json({ error: 'Ушбу раҳбар ҳисоби аллақачон бошқа телефонга бириктирилган!' });
+  }
+
+  // Security check 2: Master Setup Key check
+  const setting = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('LEADER_SETUP_KEY');
+  const validKey = setting?.value || '7777';
+  if (!masterKey || masterKey.trim() !== validKey) {
+    return res.status(403).json({ error: 'Раҳбарият махсус коди нотўғри! (Чойхона эгасидан сўранг)' });
+  }
+
+  // If code is not provided, send OTP to verify phone ownership via Telegram bot
+  if (!code) {
+    const otpRes = await sendOtpToUser(cleanPhone, { full_name: leader.full_name, role_title: leader.role_title });
+    const botConfig = getBotConfig();
+    const telegramLink = botConfig.username ? `https://t.me/${botConfig.username}?start=auth_${cleanPhone.replace('+', '')}` : null;
+
+    return res.json({
+      ok: true,
+      requiresVerification: true,
+      telegramLink,
+      message: 'Хавфсизлик учун телефон рақамингизни тасдиқланг'
+    });
+  }
+
+  // Verify OTP
+  const validOtp = db.prepare(`
+    SELECT * FROM otp_codes
+    WHERE phone = ? AND code = ? AND expires_at > ?
+    ORDER BY id DESC LIMIT 1
+  `).get(cleanPhone, code.toString().trim(), Date.now());
+
+  if (!validOtp) {
+    return res.status(400).json({ error: 'Тасдиқлаш коди нотўғри ёки муддати тугаган' });
+  }
+
+  db.prepare('DELETE FROM otp_codes WHERE id = ?').run(validOtp.id);
+
+  // Permanently bind leader's verified phone!
+  db.prepare('UPDATE users SET phone = ?, is_active = 1, updated_at = datetime(\'now\') WHERE id = ?').run(cleanPhone, leaderId);
+  const updatedLeader = db.prepare('SELECT * FROM users WHERE id = ?').get(leaderId);
+
+  const token = createAuthToken(updatedLeader);
+
+  return res.json({
+    ok: true,
+    token,
+    user: {
+      id: updatedLeader.id,
+      phone: updatedLeader.phone,
+      full_name: updatedLeader.full_name,
+      role_id: updatedLeader.role_id,
+      role_title: updatedLeader.role_title,
+      is_top3: true,
+      has_pin: !!updatedLeader.pin_code
+    }
+  });
+});
+
+// 6. Set or Update personal PIN Code
 app.post('/api/auth/set-pin', authenticate, (req, res) => {
   const { pin } = req.body;
 
@@ -288,35 +382,7 @@ app.post('/api/auth/set-pin', authenticate, (req, res) => {
   });
 });
 
-// Fast Login
-app.post('/api/auth/fast-login', (req, res) => {
-  const { userId } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-  if (!user) return res.status(404).json({ error: 'Фойдаланувчи топилмади' });
-  if (user.is_active !== 1) {
-    return res.status(403).json({ error: 'Ушбу ходим ҳали тасдиқланмаган' });
-  }
-
-  const tokenPayload = JSON.stringify({ userId: user.id, phone: user.phone, role: user.role_id, time: Date.now() });
-  const token = Buffer.from(tokenPayload).toString('base64');
-
-  return res.json({
-    ok: true,
-    token,
-    user: {
-      id: user.id,
-      phone: user.phone,
-      full_name: user.full_name,
-      role_id: user.role_id,
-      role_title: user.role_title,
-      is_top3: isTop3Role(user.role_id),
-      has_pin: !!user.pin_code,
-      telegram_chat_id: user.telegram_chat_id
-    }
-  });
-});
-
-// Current User
+// 7. Current User
 app.get('/api/auth/me', authenticate, (req, res) => {
   return res.json({
     user: {
@@ -379,7 +445,7 @@ app.get('/api/transactions', authenticate, (req, res) => {
   return res.json({ transactions });
 });
 
-app.post('/api/transactions', authenticate, (req, res) => {
+app.post('/api/transactions', authenticate, async (req, res) => {
   const { receiver_id, amount, category, comment } = req.body;
 
   if (!receiver_id) return res.status(400).json({ error: 'Қабул қилувчи ходим танланмади' });
@@ -395,7 +461,7 @@ app.post('/api/transactions', authenticate, (req, res) => {
     return res.status(400).json({ error: 'Ўзингизга пул ўтказа олмайсиз' });
   }
 
-  // IMMUTABLE SNAPSHOT (CYRILLIC)
+  // IMMUTABLE SNAPSHOT
   const insertTx = db.prepare(`
     INSERT INTO transactions (
       sender_id, sender_full_name, sender_role_title,
@@ -417,10 +483,24 @@ app.post('/api/transactions', authenticate, (req, res) => {
   );
 
   const newTx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
+
+  // Send single Telegram push notification to receiver if linked
+  if (receiver.telegram_chat_id) {
+    const formattedAmount = parsedAmount.toLocaleString('uz-UZ');
+    await sendTelegramMessage(
+      receiver.telegram_chat_id,
+      `🔔 <b>Янги тўлов топширилди!</b>\n\n` +
+      `👤 <b>Кимдан:</b> ${req.user.full_name} (${req.user.role_title})\n` +
+      `💰 <b>Сумма:</b> ${formattedAmount} сўм\n` +
+      `🏷️ <b>Мақсад:</b> ${category || 'Бошқа'}\n\n` +
+      `Илтимос, сайтга кириб пулни олганингизни тасдиқланг! ✅`
+    );
+  }
+
   return res.status(201).json({ ok: true, transaction: newTx });
 });
 
-app.post('/api/transactions/:id/confirm', authenticate, (req, res) => {
+app.post('/api/transactions/:id/confirm', authenticate, async (req, res) => {
   const txId = req.params.id;
   const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txId);
 
@@ -441,10 +521,22 @@ app.post('/api/transactions/:id/confirm', authenticate, (req, res) => {
   `).run(txId);
 
   const updatedTx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txId);
+
+  // Notify sender via Telegram
+  const sender = db.prepare('SELECT telegram_chat_id FROM users WHERE id = ?').get(tx.sender_id);
+  if (sender && sender.telegram_chat_id) {
+    await sendTelegramMessage(
+      sender.telegram_chat_id,
+      `✅ <b>Пул қабул қилинди!</b>\n\n` +
+      `👤 <b>Қабул қилди:</b> ${tx.receiver_full_name} (${tx.receiver_role_title})\n` +
+      `💰 <b>Сумма:</b> ${tx.amount.toLocaleString('uz-UZ')} сўм`
+    );
+  }
+
   return res.json({ ok: true, transaction: updatedTx });
 });
 
-app.post('/api/transactions/:id/reject', authenticate, (req, res) => {
+app.post('/api/transactions/:id/reject', authenticate, async (req, res) => {
   const txId = req.params.id;
   const { reason } = req.body;
   const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txId);
@@ -651,25 +743,25 @@ app.get('/api/settings', authenticate, (req, res) => {
   const isTop3 = isTop3Role(req.user.role_id);
   const botConfig = getBotConfig();
   const restName = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('RESTAURANT_NAME')?.value || 'Чархпалак Чойхонаси';
-  const smsProvider = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('SMS_PROVIDER')?.value || 'TELEGRAM';
+  const leaderKey = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('LEADER_SETUP_KEY')?.value || '7777';
 
   return res.json({
     restaurantName: restName,
+    leaderSetupKey: isTop3 ? leaderKey : undefined,
     telegramBotUsername: botConfig.username,
     hasBotToken: !!botConfig.token,
-    smsProvider,
     canEdit: isTop3
   });
 });
 
 app.post('/api/settings', authenticate, requireTop3, (req, res) => {
-  const { restaurantName, telegramBotToken, telegramBotUsername, smsProvider } = req.body;
+  const { restaurantName, telegramBotToken, telegramBotUsername, leaderSetupKey } = req.body;
 
   if (restaurantName) {
     db.prepare('INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)').run('RESTAURANT_NAME', restaurantName.trim());
   }
-  if (smsProvider) {
-    db.prepare('INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)').run('SMS_PROVIDER', smsProvider.trim());
+  if (leaderSetupKey) {
+    db.prepare('INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)').run('LEADER_SETUP_KEY', leaderSetupKey.trim());
   }
   if (telegramBotToken !== undefined) {
     updateBotConfig(telegramBotToken, telegramBotUsername);
@@ -678,7 +770,7 @@ app.post('/api/settings', authenticate, requireTop3, (req, res) => {
   return res.json({ ok: true, message: 'Созламалар сақланди' });
 });
 
-// Serve frontend dist in production
+// Serve frontend dist
 const distPath = path.join(__dirname, '../frontend/dist');
 app.use(express.static(distPath));
 
@@ -690,15 +782,10 @@ app.get('*', (req, res, next) => {
   });
 });
 
-// Only listen if not imported as serverless function
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🍵 Чархпалак Чойхонаси сервери қуйидаги манзилларда ишламоқда:`);
-    console.log(`   - Компьютерда: http://localhost:${PORT}`);
-    console.log(`   - Маҳаллий:    http://127.0.0.1:${PORT}`);
-    console.log(`   - Телефонда (Wi-Fi): http://10.29.17.163:${PORT}`);
-    startPolling();
-  });
-}
+// Listen on all network interfaces
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🍵 Чархпалак Чойхонаси сервери ${PORT}-портда ишламоқда.`);
+  startPolling();
+});
 
 export default app;

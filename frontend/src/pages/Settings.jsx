@@ -20,6 +20,7 @@ export default function Settings({
   onInstall 
 }) {
   const [restaurantName, setRestaurantName] = useState(settings?.restaurantName || 'Чархпалак Чойхонаси');
+  const [leaderKey, setLeaderKey] = useState(settings?.leaderSetupKey || '7777');
   const [pinCode, setPinCode] = useState('');
   const [hasPin, setHasPin] = useState(user?.has_pin || false);
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,7 @@ export default function Settings({
     setLoading(true);
 
     try {
-      await onSaveSettings({ restaurantName });
+      await onSaveSettings({ restaurantName, leaderSetupKey: leaderKey });
       setSuccessMsg('Созламалар сақланди!');
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
@@ -190,7 +191,7 @@ export default function Settings({
         </span>
       </div>
 
-      {/* RESTAURANT NAME (TOP 3) */}
+      {/* RESTAURANT NAME & LEADER KEY (TOP 3) */}
       {isTop3 && (
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
           <div>
@@ -203,6 +204,22 @@ export default function Settings({
               onChange={(e) => setRestaurantName(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-semibold focus:ring-2 focus:ring-blue-600 outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1 uppercase tracking-wider">
+              Раҳбарият махсус коди (Мастер-код)
+            </label>
+            <input
+              type="text"
+              value={leaderKey}
+              onChange={(e) => setLeaderKey(e.target.value)}
+              placeholder="7777"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-semibold focus:ring-2 focus:ring-blue-600 outline-none"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Ушбу код янги телефон уланганда раҳбарликни тасдиқлаш учун ишлатилади.
+            </p>
           </div>
 
           <button

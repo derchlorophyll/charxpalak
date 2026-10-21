@@ -33,9 +33,9 @@ export const api = {
   sendOtp: (phone) => request('/auth/send-otp', { method: 'POST', body: JSON.stringify({ phone }) }),
   verifyOtp: (phone, code) => request('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ phone, code }) }),
   verifyPin: (phone, pin) => request('/auth/verify-pin', { method: 'POST', body: JSON.stringify({ phone, pin }) }),
-  setPin: (pin) => request('/auth/set-pin', { method: 'POST', body: JSON.stringify({ pin }) }),
+  claimLeader: (data) => request('/auth/claim-leader', { method: 'POST', body: JSON.stringify(data) }),
+  setPin: (pin) => request('/auth/set-pin', { method: 'POST', body: JSON.stringify(pin ? { pin } : {}) }),
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
-  fastLogin: (userId) => request('/auth/fast-login', { method: 'POST', body: JSON.stringify({ userId }) }),
   getMe: () => request('/auth/me'),
 
   // Transactions
