@@ -1,12 +1,14 @@
 services:
   - type: web
-    name: charxpalak-choyxona
+    name: charxpalak-bot
     env: node
     plan: free
-    buildCommand: npm run build
-    startCommand: node backend/server.js
+    buildCommand: npm install
+    startCommand: node bot.js
     envVars:
       - key: NODE_ENV
         value: production
+      - key: BOT_TOKEN
+        value: 8864236616:AAFhhyZay4tnhiQlVrjX5S7BftiUCH-tOcQ
       - key: NODE_VERSION
         value: 20.18.0

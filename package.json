@@ -1,23 +1,28 @@
 {
-  "name": "charxpalak-choyxona-app",
-  "version": "1.0.0",
-  "description": "Чархпалак Чойхонаси учун ходимлар ва пул ҳаракатини ҳисобга олиш тизими (PWA)",
-  "main": "backend/server.js",
+  "name": "charxpalak-telegram-bot",
+  "version": "2.0.0",
+  "description": "Чархпалак Чойхонаси учун расмий Telegram Бот ва Мини Эпп",
+  "main": "bot.js",
+  "type": "module",
   "engines": {
-    "node": "20.x"
+    "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "npm --prefix backend install && npm --prefix frontend install && npm --prefix frontend run build",
-    "start": "node backend/server.js",
-    "dev:frontend": "npm --prefix frontend run dev",
-    "dev:backend": "npm --prefix backend run dev"
+    "start": "node bot.js",
+    "dev": "node bot.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "telegraf": "^4.16.3"
   },
   "keywords": [
+    "telegram-bot",
     "choyxona",
-    "pwa",
+    "charxpalak",
     "uzbekistan",
     "finance",
-    "restaurant"
+    "miniapp"
   ],
   "author": "Charxpalak Team",
   "license": "ISC"

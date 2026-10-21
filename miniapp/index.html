@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>Чархпалак Чойхонаси</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      background-color: var(--tg-theme-bg-color, #f1f5f9);
+      color: var(--tg-theme-text-color, #0f172a);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-3 select-none">
+
+  <!-- Top Header -->
+  <header class="flex items-center justify-between pb-3 border-b border-slate-200/60">
+    <div class="flex items-center space-x-2.5">
+      <div class="w-11 h-11 rounded-2xl bg-white shadow-sm border border-blue-200/80 p-1 flex items-center justify-center">
+        <img src="/logo.png" alt="Чархпалак" class="w-full h-full object-contain">
+      </div>
+      <div>
+        <h1 class="text-sm font-black text-blue-950 leading-tight">Чархпалак Чойхонаси</h1>
+        <div id="userBadge" class="text-[11px] font-semibold text-blue-700">Юкланмоқда...</div>
+      </div>
+    </div>
+    <button onclick="refreshData()" class="p-2 bg-white rounded-xl shadow-sm border border-slate-200 text-blue-700 active:scale-95 transition-all">
+      <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+    </button>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 overflow-y-auto py-3 space-y-3.5 custom-scroll">
+
+    <!-- Stats Card -->
+    <div class="bg-gradient-to-r from-blue-900 via-blue-800 to-sky-700 rounded-3xl p-4 text-white shadow-lg relative overflow-hidden">
+      <div class="flex items-center justify-between text-xs text-sky-200 font-bold uppercase tracking-wider">
+        <span id="roleLabel">🍴 Ходим</span>
+        <span class="flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Онлайн</span>
+        </span>
+      </div>
+      <div class="mt-2">
+        <div class="text-[11px] text-sky-200 font-medium">Бугунги тасдиқланган тўловлар:</div>
+        <div id="todayTurnover" class="text-2xl font-black tracking-tight mt-0.5">0 сўм</div>
+      </div>
+      <div class="mt-3 pt-2.5 border-t border-white/15 flex items-center justify-between text-xs font-semibold">
+        <div>
+          <span class="text-sky-200 text-[10px] block">Кутилаётган:</span>
+          <span id="pendingTurnover" class="font-bold">0 сўм</span>
+        </div>
+        <button onclick="openSendModal()" class="bg-white text-blue-900 font-extrabold px-3 py-1.5 rounded-xl shadow hover:bg-sky-50 active:scale-95 transition-all flex items-center space-x-1 text-xs">
+          <i data-lucide="send" class="w-3.5 h-3.5"></i>
+          <span>Пул бериш</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- PENDING INCOMING PAYMENTS ALERT -->
+    <div id="pendingContainer" class="space-y-2 hidden">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center space-x-1">
+          <i data-lucide="bell" class="w-3.5 h-3.5 text-amber-600 animate-bounce"></i>
+          <span>Сизга келган тўловлар (Тасдиқлаш керак)</span>
+        </h3>
+      </div>
+      <div id="pendingList" class="space-y-2"></div>
+    </div>
+
+    <!-- PENDING APPLICANTS (FOR TOP 3) -->
+    <div id="applicantsContainer" class="space-y-2 hidden">
+      <h3 class="text-xs font-bold text-sky-900 uppercase tracking-wider flex items-center space-x-1">
+        <i data-lucide="user-plus" class="w-3.5 h-3.5 text-sky-600"></i>
+        <span>Янги ходимлар аризалари</span>
+      </h3>
+      <div id="applicantsList" class="space-y-2"></div>
+    </div>
+
+    <!-- RECENT TRANSACTIONS -->
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">
+          Сўнгги пул ҳаракатлари
+        </h3>
+        <span id="txCount" class="text-[11px] text-slate-500 font-medium">0 та</span>
+      </div>
+      <div id="txList" class="space-y-2">
+        <div class="p-6 text-center text-xs text-slate-400">Юкланмоқда...</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Action Bar -->
+  <footer class="pt-2">
+    <button onclick="openSendModal()" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-extrabold py-3.5 rounded-2xl shadow-lg shadow-blue-700/30 flex items-center justify-center space-x-2 active:scale-98 transition-all">
+      <i data-lucide="arrow-up-right" class="w-5 h-5"></i>
+      <span>Пул беришни бошлаш</span>
+    </button>
+  </footer>
+
+  <!-- SEND MONEY MODAL -->
+  <div id="sendModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in fade-in slide-in-from-bottom duration-200">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
+            💸
+          </div>
+          <h3 class="text-sm font-extrabold text-blue-950">Пул бериш</h3>
+        </div>
+        <button onclick="closeSendModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="sendForm" onsubmit="handleSendSubmit(event)" class="space-y-3.5">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            Кимга (Қабул қилувчи ходим)
+          </label>
+          <select id="receiverSelect" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600">
+            <option value="">Ходимни танланг...</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            Сумма (сўм)
+          </label>
+          <input type="number" id="sendAmount" placeholder="Масалан: 5000000" min="1000" step="1000" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-extrabold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600">
+          <div class="flex gap-1.5 mt-1.5 flex-wrap">
+            <button type="button" onclick="setQuickAmount(100000)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] font-bold text-slate-700">+100 минг</button>
+            <button type="button" onclick="setQuickAmount(500000)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] font-bold text-slate-700">+500 минг</button>
+            <button type="button" onclick="setQuickAmount(1000000)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] font-bold text-slate-700">+1 млн</button>
+            <button type="button" onclick="setQuickAmount(5000000)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] font-bold text-slate-700">+5 млн</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            Мақсад / Категория
+          </label>
+          <select id="sendCategory" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-blue-600">
+            <option value="Кунлик касса">Кунлик касса</option>
+            <option value="Гўшт учун">Гўшт учун</option>
+            <option value="Харид / Маҳсулот">Харид / Маҳсулот</option>
+            <option value="Маош">Маош</option>
+            <option value="Бошқа">Бошқа</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            Қўшимча изоҳ (ихтиёрий)
+          </label>
+          <input type="text" id="sendComment" placeholder="Масалан: Қовурдоқ учун гўшт олинди" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-blue-600">
+        </div>
+
+        <button type="submit" id="sendSubmitBtn" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-extrabold py-3 rounded-xl shadow-md transition-all active:scale-98">
+          Топшириш ва юбориш
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+
+    let currentUser = null;
+    let employeesList = [];
+
+    function formatMoney(amount) {
+      return Number(amount || 0).toLocaleString('uz-UZ') + ' сўм';
+    }
+
+    function setQuickAmount(val) {
+      const input = document.getElementById('sendAmount');
+      const current = parseInt(input.value || 0, 10);
+      input.value = current + val;
+    }
+
+    async function initUser() {
+      try {
+        const initData = tg?.initData || '';
+        const userParam = tg?.initDataUnsafe?.user?.id || '';
+        const res = await fetch(`/api/me?telegram_id=${userParam}`);
+        const data = await res.json();
+
+        if (data.user) {
+          currentUser = data.user;
+          document.getElementById('userBadge').innerText = `${currentUser.full_name} (${currentUser.role_title})`;
+          document.getElementById('roleLabel').innerText = currentUser.role_title;
+        } else {
+          document.getElementById('userBadge').innerText = 'Аввал Telegram ботда рўйхатдан ўтинг';
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function refreshData() {
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+      await Promise.all([initUser(), loadStats(), loadEmployees(), loadTransactions()]);
+    }
+
+    async function loadStats() {
+      if (!currentUser) return;
+      try {
+        const res = await fetch(`/api/stats?user_id=${currentUser.id}`);
+        const stats = await res.json();
+        document.getElementById('todayTurnover').innerText = formatMoney(stats.todayConfirmed);
+        document.getElementById('pendingTurnover').innerText = formatMoney(stats.totalPending);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function loadEmployees() {
+      if (!currentUser) return;
+      try {
+        const res = await fetch(`/api/employees?exclude_user_id=${currentUser.id}`);
+        const data = await res.json();
+        employeesList = data.employees || [];
+
+        const select = document.getElementById('receiverSelect');
+        select.innerHTML = '<option value="">Ходимни танланг...</option>';
+        employeesList.forEach(emp => {
+          const opt = document.createElement('option');
+          opt.value = emp.id;
+          opt.innerText = `${emp.full_name} (${emp.role_title})`;
+          select.appendChild(opt);
+        });
+
+        // Top 3 applicants
+        if (currentUser.role_id === 'OWNER' || currentUser.role_id === 'SUPERVISOR' || currentUser.role_id === 'MANAGER') {
+          const appRes = await fetch('/api/applicants');
+          const appData = await appRes.json();
+          renderApplicants(appData.applicants || []);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderApplicants(applicants) {
+      const container = document.getElementById('applicantsContainer');
+      const list = document.getElementById('applicantsList');
+      if (!applicants.length) {
+        container.classList.add('hidden');
+        return;
+      }
+      container.classList.remove('hidden');
+      list.innerHTML = applicants.map(app => `
+        <div class="bg-sky-50 border border-sky-200 rounded-2xl p-3 flex items-center justify-between">
+          <div>
+            <div class="font-bold text-xs text-blue-950">${app.full_name}</div>
+            <div class="text-[11px] text-sky-800">${app.role_title} • ${app.phone}</div>
+          </div>
+          <div class="flex space-x-1.5">
+            <button onclick="approveApplicant(${app.id})" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded-xl text-[11px] font-bold">Қабул</button>
+            <button onclick="rejectApplicant(${app.id})" class="bg-red-100 text-red-700 px-2 py-1.5 rounded-xl text-[11px] font-bold">Рад</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function approveApplicant(id) {
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+      await fetch(`/api/applicants/${id}/approve`, { method: 'POST' });
+      refreshData();
+    }
+
+    async function rejectApplicant(id) {
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
+      await fetch(`/api/applicants/${id}/reject`, { method: 'POST' });
+      refreshData();
+    }
+
+    async function loadTransactions() {
+      if (!currentUser) return;
+      try {
+        const res = await fetch(`/api/transactions?user_id=${currentUser.id}`);
+        const data = await res.json();
+        const txs = data.transactions || [];
+
+        // Incoming pending for current user
+        const incomingPending = txs.filter(t => t.receiver_id === currentUser.id && t.status === 'PENDING');
+        renderPendingIncoming(incomingPending);
+
+        document.getElementById('txCount').innerText = `${txs.length} та`;
+        const list = document.getElementById('txList');
+
+        if (!txs.length) {
+          list.innerHTML = '<div class="p-6 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">Ҳозирча тўловлар йўқ</div>';
+          return;
+        }
+
+        list.innerHTML = txs.map(t => {
+          const isSender = t.sender_id === currentUser.id;
+          const isConfirmed = t.status === 'CONFIRMED';
+          const isPending = t.status === 'PENDING';
+          const isRejected = t.status === 'REJECTED';
+
+          const statusBadge = isConfirmed 
+            ? '<span class="text-emerald-700 bg-emerald-50 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md">Тасдиқланди</span>'
+            : isPending 
+            ? '<span class="text-amber-700 bg-amber-50 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-md">Кутилмоқда</span>'
+            : '<span class="text-red-700 bg-red-50 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded-md">Рад этилди</span>';
+
+          return `
+            <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div class="flex items-center space-x-2.5">
+                <div class="w-9 h-9 rounded-xl ${isSender ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'} flex items-center justify-center font-bold text-sm">
+                  ${isSender ? '↗️' : '↙️'}
+                </div>
+                <div>
+                  <div class="font-extrabold text-xs text-blue-950">
+                    ${isSender ? t.receiver_full_name : t.sender_full_name}
+                  </div>
+                  <div class="text-[11px] text-slate-500 font-medium">
+                    ${t.category} ${t.comment ? '• ' + t.comment : ''}
+                  </div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-black text-xs ${isSender ? 'text-slate-900' : 'text-emerald-700'}">
+                  ${isSender ? '-' : '+'}${formatMoney(t.amount)}
+                </div>
+                <div class="mt-1">${statusBadge}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderPendingIncoming(incoming) {
+      const container = document.getElementById('pendingContainer');
+      const list = document.getElementById('pendingList');
+      if (!incoming.length) {
+        container.classList.add('hidden');
+        return;
+      }
+      container.classList.remove('hidden');
+      list.innerHTML = incoming.map(t => `
+        <div class="bg-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 shadow-sm space-y-2.5 animate-pulse">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-extrabold text-amber-900 uppercase">Сизга пул берилди!</span>
+            <span class="font-black text-sm text-amber-950">${formatMoney(t.amount)}</span>
+          </div>
+          <div class="text-xs text-amber-900">
+            Кимдан: <b>${t.sender_full_name}</b> (${t.sender_role_title})<br>
+            Мақсад: ${t.category} ${t.comment ? '• ' + t.comment : ''}
+          </div>
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button onclick="confirmTx(${t.id})" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-xl text-xs shadow active:scale-95 transition-all">
+              ✅ Қабул қилдим
+            </button>
+            <button onclick="rejectTx(${t.id})" class="bg-red-100 hover:bg-red-200 text-red-700 font-bold py-2 rounded-xl text-xs active:scale-95 transition-all">
+              ❌ Рад этиш
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function confirmTx(id) {
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+      await fetch(`/api/transactions/${id}/confirm`, { method: 'POST' });
+      refreshData();
+    }
+
+    async function rejectTx(id) {
+      const reason = prompt('Рад этиш сабабини ёзинг:', 'Нотўғри сумма');
+      if (!reason) return;
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
+      await fetch(`/api/transactions/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+      refreshData();
+    }
+
+    function openSendModal() {
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+      document.getElementById('sendModal').classList.remove('hidden');
+    }
+
+    function closeSendModal() {
+      document.getElementById('sendModal').classList.add('hidden');
+    }
+
+    async function handleSendSubmit(e) {
+      e.preventDefault();
+      const receiverId = document.getElementById('receiverSelect').value;
+      const amount = document.getElementById('sendAmount').value;
+      const category = document.getElementById('sendCategory').value;
+      const comment = document.getElementById('sendComment').value;
+
+      if (!receiverId || !amount) return;
+
+      const receiver = employeesList.find(e => e.id === parseInt(receiverId, 10));
+
+      const submitBtn = document.getElementById('sendSubmitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Юборилмоқда...';
+
+      try {
+        const res = await fetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender_id: currentUser.id,
+            receiver_id: receiver.id,
+            amount: parseInt(amount, 10),
+            category,
+            comment
+          })
+        });
+
+        if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        closeSendModal();
+        document.getElementById('sendForm').reset();
+        refreshData();
+      } catch (err) {
+        alert('Хатолик юз берди: ' + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Топшириш ва юбориш';
+      }
+    }
+
+    // Auto-init and poll
+    refreshData();
+    setInterval(refreshData, 4000);
+    lucide.createIcons();
+  </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "telegram_id": null,
+      "phone": "+998900000001",
+      "full_name": "Каюмов Жамшидбек",
+      "role_id": "OWNER",
+      "role_title": "Мулкдор (Эга)",
+      "is_active": true,
+      "created_at": "2026-10-21T16:36:13.009Z"
+    },
+    {
+      "id": 2,
+      "telegram_id": null,
+      "phone": "+998900000002",
+      "full_name": "Басиржонов Жавлонбек",
+      "role_id": "SUPERVISOR",
+      "role_title": "Иш бошқарувчи (РР)",
+      "is_active": true,
+      "created_at": "2026-10-21T16:36:13.011Z"
+    },
+    {
+      "id": 3,
+      "telegram_id": null,
+      "phone": "+998900000003",
+      "full_name": "Паҳлавон",
+      "role_id": "MANAGER",
+      "role_title": "Иш юритувчи (УД)",
+      "is_active": true,
+      "created_at": "2026-10-21T16:36:13.011Z"
+    }
+  ],
+  "transactions": [],
+  "settings": {
+    "restaurant_name": "Чархпалак Чойхонаси",
+    "bot_token": "8864236616:AAFhhyZay4tnhiQlVrjX5S7BftiUCH-tOcQ",
+    "bot_username": "charxpalak_authbot",
+    "master_key": "7777"
+  }
+}

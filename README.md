@@ -1,70 +1,37 @@
-# 🫖 Charxpalak Choyxonasi — Pul Harakati va Xodimlar Tizimi (PWA)
+# 🫖 Чархпалак Чойхонаси — Расмий Telegram Бот ва Мини Эпп
 
-Charxpalak choyxonasi xodimlari uchun to'liq **o'zbek tilida** yaratilgan, sodda, ortiqcha narsalarsiz (minimalist) va tezkor **Progressive Web App (PWA)** dasturi.
+Чархпалак Чойхонаси ходимлари ўртасидаги пул ҳаракатини тўлиқ ва хавфсиз ҳисобга олувчи расмий тизим.
 
----
-
-## 🌟 Asosiy Imkoniyatlar va Qoidalar
-
-1. **👑 Asosiy Uchlik (Rahbariyat):**
-   - **Mulkdor (Ega)**
-   - **Ish boshqaruvchi**
-   - **Ish yurituvchi (UD)**
-   - *Faqat ushbu 3 kishi yangi xodimlarni (kassir, qassob, oshpazlar va h.k.) qo'sha oladi, tahrirlay oladi yoki nofaol qila oladi.*
-   - *Barcha pul aylanmasi, tranzaksiyalar tarixi va to'liq hisobotlar ushbu uchlikka ochiq ko'rinadi.*
-
-2. **💸 Pul berish va Tasdiqlash tizimi:**
-   - Masalan: Ish yurituvchi (UD) **"Pul berish"** tugmasini bosadi.
-   - Ro'yxatdan qabul qiluvchi xodimni (masalan: **Ergashev Jamshid (Kassir)**) tanlaydi.
-   - Summani kiritadi (masalan: `5 000 000` so'm) va xarajat maqsadini tanlaydi.
-   - Kassirning telefoniga darhol bildirishnoma boradi va uning ekranida tasdiqlash kartasi chiqadi.
-   - Kassir **"✅ Qabul qildim"** tugmasini bosadi va summa tasdiqlangan holatga o'tadi. Noto'g'ri bo'lsa **"❌ Rad etish"** tugmasini bosishi mumkin.
-
-3. **🔒 Tarixiy Ismlar Daxlsizligi (O'chmas ismlar):**
-   - Har bir tranzaksiyada pul beruvchi va oluvchining familiyasi, ismi va lavozimi **muhrlanadi (snapshot)**.
-   - Agar xodim ishdan ketsa yoki o'rniga boshqa odam kelib ismi o'zgartirilsa, **o'tgan barcha to'lovlarda avvalgi xodimning ismi o'zgarmasdan qoladi**.
-   - Yangi xodimning ismi faqat u kelganidan keyingi yangi to'lovlarda aks etadi.
-
-4. **📱 PWA (Telefonga Ilova Sifatida O'rnatish):**
-   - Brauzer orqali ochilganda ekranda **"O'rnatish"** tugmasi chiqadi.
-   - Android va iOS telefonlarga to'liq mustaqil ilova bo'lib o'rnatiladi.
-   - Oflayn keshlash va tezkor ishlash uchun Service Worker integratsiya qilingan.
-
-5. **✈️ Bepul Telegram Bot Orqali Kirish (SMS o'rniga 0 so'm):**
-   - SMS har biri 50-80 so'm pul turishi tufayli, ilovaga **100% BEPUL Telegram Bot** mexanizmi o'rnatilgan.
-   - Xodim telefon raqamini kiritib **"Telegram orqali kod olish"** tugmasini bosadi va uning Telegramiga 4 xonali kirish kodi boradi.
-   - Shuningdek, dasturni darhol sinash uchun qulay **Tezkor Sinov (Demo Switcher)** tugmalari mavjud.
+## 🌟 Асосий имкониятлар:
+1. **Тўлиқ Telegram ичида ишлайди**:
+   - Ҳеч қандай мураккаб браузер ва PWA керак эмас.
+   - Ходимлар тўғридан-тўғри Telegram орқали рўйхатдан ўтади ва тасдиқланади.
+2. **Асосий Учлик (Раҳбарият)**:
+   - **Каюмов Жамшидбек** — Мулкдор (Эга)
+   - **Басиржонов Жавлонбек** — Иш бошқарувчи (РР)
+   - **Паҳлавон** — Иш юритувчи (УД)
+   - Раҳбарият ўз ҳисобини **Махсус код: `7777`** орқали бир марта боғлайди.
+3. **Ходимларни қабул қилиш**:
+   - Янги ходим рўйхатдан ўтганда, раҳбариятга дарҳол Telegram орқали хабар ва `[✅ Қабул қилиш] [❌ Рад этиш]` тугмалари келади.
+4. **Пул бериш ва Тезкор Тасдиқлаш**:
+   - «💸 Пул бериш» ➔ Ходимни танлаш ➔ Суммани ёзиш ➔ Топшириш.
+   - Пулни олувчи ходимга **ўша сониянинг ўзида Telegram хабар** келади:
+     *«Паҳлавон сизга 5,000,000 сўм топширди. Қабул қилдингизми?»*
+   - Тугмалар: `[✅ Қабул қилдим]` ва `[❌ Рад этиш]`.
+   - Қабул қилинганда, пулни берган одамга ҳам тасдиқнома боради.
+5. **Ўзгармас тарих (Immutable History)**:
+   - Ҳар бир ўтказмада ким кимга пул бергани (исм ва лавозими билан) умрбод сақланиб қолади.
+6. **📱 Интерактив Мини Эпп (Mini App)**:
+   - Бот ичида очилувчи замонавий визуал ойна орқали ҳам баланс, статистика ва тўловларни бошқариш мумкин.
 
 ---
 
-## 🚀 Qanday Ishga Tushiriladi?
+## 🚀 Render.com га юклаш (1 дақиқада):
 
-### 1. Dasturni ishga tushirish:
-```bash
-npm start
-```
-Dastur avtomatik ravishda `http://localhost:4000` manzilida ochiladi.
-
-### 2. Dasturni qayta yig'ish (agar dizayn o'zgarsa):
-```bash
-npm run build
-```
-
----
-
-## 🤖 Bepul Telegram Botni Ulash (30 soniya)
-
-1. Telegramda rasmiy **@BotFather** botiga kiring.
-2. `/newbot` buyrug'ini yuboring.
-3. Botga nom bering (masalan: `Charxpalak Choyxona Boti`) va username bering (masalan: `CharxpalakHisobBot`).
-4. BotFather bergan **HTTP API Token**ni oling.
-5. Dasturda **"Sozlamalar"** bo'limiga kirib Tokenni joylang va saqlang.
-6. Bo'ldi! Endi xodimlarga bepul kirish kodlari va to'lov bildirishnomalari Telegram orqali yuboriladi.
-
----
-
-## 📂 Loyiha Tuzilmasi
-
-- `backend/` — Express API, SQLite ma'lumotlar bazasi (`charxpalak.db`), Telegram bot integratsiyasi va xavfsizlik.
-- `frontend/` — React 18, Vite, Tailwind CSS, Lucide Icons, PWA manifesti va Service Worker.
-- `package.json` — Loyihani boshqarish skriptlari.
+1. Барча файлларни ўз GitHub репозиторийингизга юкланг (**https://github.com/derchlorophyll/charxpalak**).
+2. Render.com дашбордида:
+   - **Build Command**: `npm install`
+   - **Start Command**: `node bot.js`
+   - **Environment Variables**:
+     - `BOT_TOKEN`: `8864236616:AAFhhyZay4tnhiQlVrjX5S7BftiUCH-tOcQ`
+3. Бўлди! Ҳеч қандай C++ / node-gyp муаммоси йўқ, 100% соф JavaScript.
